@@ -31,6 +31,9 @@ main { max-width:1200px; margin:auto; padding:12px 16px 40px; display:grid; grid
 .row { display:flex; justify-content:space-between; align-items:center; margin-top:auto; padding-top:6px; }
 .price { font-weight:700; font-size:17px; }
 .rank { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+.krw { font-size:13px; color:var(--muted); }
+.cmp { font-size:12px; color:var(--muted); border-top:1px dashed var(--line); padding-top:4px; margin-top:2px; }
+.cmp b { color:var(--accent); }
 .new { color:var(--accent); font-size:12px; font-weight:700; }
 .empty { grid-column:1/-1; text-align:center; color:var(--muted); padding:40px; }
 details { max-width:1200px; margin:0 auto; padding:0 16px 8px; color:var(--muted); font-size:13px; }
@@ -43,7 +46,8 @@ details { max-width:1200px; margin:0 auto; padding:0 16px 8px; color:var(--muted
 </header>
 <details>
   <summary>안내 · 등급(랭크) 설명</summary>
-  <p>원본: <a href="https://takayama78online.jp/shop/pages/b03_zaiko.aspx">takayama78online.jp 販売春日店</a>. 상품명은 자동 변환(용어 사전 + 가타카나 음역)이라 어색할 수 있습니다. 정확한 정보·구매는 카드를 눌러 원본 페이지에서 확인하세요. 가격은 세금 포함 엔화입니다.</p>
+  <p>원본: <a href="https://takayama78online.jp/shop/pages/b03_zaiko.aspx">takayama78online.jp 販売春日店</a>. 상품명은 자동 변환(용어 사전 + 가타카나 음역)이라 어색할 수 있습니다. 정확한 정보·구매는 카드를 눌러 원본 페이지에서 확인하세요. 가격은 세금 포함 엔화이고, 원화는 참고용 환산(관세·부가세·송금 수수료 제외)입니다.</p>
+  <p>신품가 비교: 품번으로 네이버쇼핑을 검색해, 제목에 품번이 들어간 신품 결과의 중간값과 비교합니다. 단종 모델이거나 품번이 없으면 표시되지 않으며, 병행수입·옵션 차이로 오차가 있을 수 있습니다.</p>
   <p>등급(대략적 의미, 정확한 기준은 원 사이트): S 미사용에 가까움 · SA 사용감 매우 적음 · A 사용감 적음 · AB 약간의 사용감 · B 사용감 있음 · BC 사용감 다소 많음 · C 사용감 많음 · D 손상 있음</p>
 </details>
 <div class="bar"><div>
@@ -59,7 +63,9 @@ details { max-width:1200px; margin:0 auto; padding:0 16px 8px; color:var(--muted
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let items = [], cat = "전체";
+let items = [], cat = "전체", rate = 0;
+const won = n => (Math.round(n / 1000) * 1000).toLocaleString();  // 천 원 단위
+const pct = (a, b) => { const p = Math.round((a / b - 1) * 100); return (p > 0 ? "+" : "") + p + "%"; };
 
 function render() {
   const q = $("#q").value.trim().toLowerCase();
@@ -76,6 +82,8 @@ function render() {
         <div class="ja" lang="ja">${esc(it.model)}</div>
         <div class="spec">${esc(it.spec_ko)}</div>
         <div class="row"><span class="price">¥${it.price.toLocaleString()}</span>${it.rank ? `<span class="rank">${esc(it.rank)}등급</span>` : ""}</div>
+        ${rate ? `<div class="krw">≈ ₩${won(it.price * rate)}</div>` : ""}
+        ${rate && it.new_krw ? `<div class="cmp" title="네이버쇼핑 검색어: ${esc(it.new_q)}">네이버 신품가 ₩${won(it.new_krw)} 대비 <b>${pct(it.price * rate, it.new_krw)}</b></div>` : ""}
       </div>
     </a>`).join("") : '<div class="empty">조건에 맞는 상품이 없습니다.</div>';
 }
@@ -93,7 +101,12 @@ $("#sort").onchange = render;
 // 열 때마다 최신 스냅샷을 받도록 캐시 무효화
 fetch("data.json?t=" + Date.now(), { cache: "no-store" })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-  .then(d => { items = d.items; $("#meta").textContent = `${d.count.toLocaleString()}개 상품 · 마지막 갱신 ${d.updated} (일본 시간)`; tabs(); render(); })
+  .then(d => {
+    items = d.items; rate = d.jpykrw || 0;
+    $("#meta").textContent = `${d.count.toLocaleString()}개 상품 · 마지막 갱신 ${d.updated} (일본 시간)` +
+      (rate ? ` · 환율 100엔 = ${(rate * 100).toFixed(1)}원 (ECB 기준)` : "");
+    tabs(); render();
+  })
   .catch(e => { $("#meta").textContent = "데이터를 불러오지 못했습니다: " + e.message; });
 </script>
 </body>

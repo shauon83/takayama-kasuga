@@ -14,9 +14,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: python scrape.py
+        env:  # 저장소 Settings → Secrets 에 등록 (없으면 신품가 비교만 생략)
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
       - name: commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/data.json
+          git add docs/data.json $(ls price_cache.json 2>/dev/null)
           git diff --cached --quiet || { git commit -m "재고 갱신 $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M')" && git push; }

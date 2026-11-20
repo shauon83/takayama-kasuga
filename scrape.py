@@ -1,6 +1,6 @@
 """高山質店 販売春日店(supplier=b03) 재고를 수집해 한국어로 변환, docs/data.json 에 저장."""
-import html, json, re, sys, time, unicodedata, urllib.request
-from datetime import datetime, timedelta, timezone
+import html, json, os, re, statistics, sys, time, unicodedata, urllib.parse, urllib.request
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -131,7 +131,65 @@ def to_korean(s):
     return re.sub(r"[ァ-ヺー]+|[ぁ-ゖ]+", lambda m: kata_to_hangul(m.group()), s)
 
 
+def get_json(url, headers=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "inventory-ko", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def jpy_krw(old):
+    try:  # 유럽중앙은행 기준 환율 (키 불필요)
+        return get_json("https://api.frankfurter.dev/v1/latest?from=JPY&to=KRW")["rates"]["KRW"]
+    except (OSError, KeyError, ValueError):
+        return old.get("jpykrw")  # 실패 시 직전 환율 유지
+
+
+def norm(s):
+    return re.sub(r"[^0-9a-z]", "", unicodedata.normalize("NFKC", s).lower())
+
+
+def naver_new_price(query, ref):
+    """네이버쇼핑 신품(productType 1~3) 중 제목에 품번이 들어간 결과의 중간값(원). 없으면 None."""
+    url = "https://openapi.naver.com/v1/search/shop.json?display=40&query=" + urllib.parse.quote(query)
+    res = get_json(url, {"X-Naver-Client-Id": os.environ["NAVER_CLIENT_ID"],
+                         "X-Naver-Client-Secret": os.environ["NAVER_CLIENT_SECRET"]})
+    prices = [int(r["lprice"]) for r in res.get("items", [])
+              if r.get("productType") in ("1", "2", "3") and ref in norm(r["title"]) and r.get("lprice")]
+    return int(statistics.median(prices)) if prices else None  # 최저가는 부품·액세서리일 수 있어 중간값
+
+
+def add_new_prices(items):
+    if not os.environ.get("NAVER_CLIENT_ID"):
+        print("NAVER_CLIENT_ID 없음 — 신품가 비교 생략", file=sys.stderr)
+        return
+    path = ROOT / "price_cache.json"
+    cache = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    today, calls = date.today(), 0
+    for it in items:
+        ref = norm(it["ref"])
+        if len(ref) < 4:  # 품번이 없거나 너무 짧으면 오매칭 위험
+            continue
+        query = f'{it["brand"]} {it["ref"]}'
+        hit = cache.get(query)
+        if not hit or date.fromisoformat(hit["checked"]) < today - timedelta(days=7):
+            if calls >= 3000:  # shortcut: 1회 실행당 상한, 남은 건 다음 실행에서 조회
+                continue
+            try:
+                hit = {"krw": naver_new_price(query, ref), "checked": today.isoformat()}
+            except (OSError, ValueError) as e:
+                print(f"naver 실패 {query}: {e}", file=sys.stderr)
+                continue
+            cache[query], calls = hit, calls + 1
+            time.sleep(0.12)  # API 초당 호출 제한 대비
+        if hit["krw"]:
+            it["new_krw"], it["new_q"] = hit["krw"], query
+    path.write_text(json.dumps(cache, ensure_ascii=False, indent=0), encoding="utf-8")
+    print(f"naver 조회 {calls}건", file=sys.stderr)
+
+
 def main():
+    old_path = ROOT / "docs" / "data.json"
+    old = json.loads(old_path.read_text(encoding="utf-8")) if old_path.exists() else {}
     items = []
     for tree, cat in CATEGORIES.items():
         page = 1
@@ -152,8 +210,9 @@ def main():
         it["spec_ko"] = to_korean(it["title"].rpartition("』")[2]).strip()
         it["model_ko"] = to_korean(it["model"])
         it["brand"] = to_korean(it["brand"])  # 대부분 영문, 'その他…' 같은 경우만 변환됨
+    add_new_prices(items)
     now = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M")
-    out = {"updated": now, "count": len(items), "items": items}
+    out = {"updated": now, "jpykrw": jpy_krw(old), "count": len(items), "items": items}
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "docs" / "data.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     print(f"saved {len(items)} items", file=sys.stderr)
@@ -167,6 +226,7 @@ def _selftest():
     assert kata_to_hangul("クロノ") == "크로노" and kata_to_hangul("プレミアム") == "프레미암"
     assert parse('class="StyleT_Item_" <a class="goods_name_" href="/shop/g/g123/" title="【A】b">'
                  '<span class="price_ prc_"> 1,000円</span>ランク：ＡＢ品</span>在庫あり')[0]["price"] == 1000
+    assert norm("M46-127 ") == "m46127" and norm("ＩＷ３７１４４６") == "iw371446"
 
 
 if __name__ == "__main__":
