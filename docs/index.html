@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다카야마 가스가점 재고</title>
+<style>
+:root { --bg:#f6f6f4; --card:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e3e3e0; --accent:#b4232a; }
+@media (prefers-color-scheme: dark) { :root { --bg:#131314; --card:#1e1e20; --fg:#ececee; --muted:#9a9aa0; --line:#2e2e31; --accent:#ff6b6b; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+a { color:inherit; }
+header { padding:20px 16px 8px; max-width:1200px; margin:auto; }
+h1 { margin:0; font-size:22px; }
+.sub { color:var(--muted); font-size:13px; }
+.bar { position:sticky; top:0; z-index:1; background:var(--bg); border-bottom:1px solid var(--line); }
+.bar > div { max-width:1200px; margin:auto; padding:10px 16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.tabs { display:flex; gap:6px; overflow-x:auto; width:100%; padding-bottom:2px; }
+.tabs button { flex:none; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
+.tabs button[aria-pressed="true"] { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+input, select { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
+input { flex:1; min-width:180px; }
+main { max-width:1200px; margin:auto; padding:12px 16px 40px; display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; text-decoration:none; }
+.card:hover { border-color:var(--muted); }
+.card img { width:100%; aspect-ratio:1; object-fit:cover; background:#fff; }
+.body { padding:10px 12px 12px; display:flex; flex-direction:column; gap:3px; flex:1; }
+.brand { font-weight:700; font-size:13px; letter-spacing:.02em; }
+.ja, .spec { color:var(--muted); font-size:12px; }
+.spec { font-size:13px; }
+.row { display:flex; justify-content:space-between; align-items:center; margin-top:auto; padding-top:6px; }
+.price { font-weight:700; font-size:17px; }
+.rank { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+.new { color:var(--accent); font-size:12px; font-weight:700; }
+.empty { grid-column:1/-1; text-align:center; color:var(--muted); padding:40px; }
+details { max-width:1200px; margin:0 auto; padding:0 16px 8px; color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>다카야마 질점 · 판매 가스가점 재고</h1>
+  <div class="sub" id="meta">불러오는 중…</div>
+</header>
+<details>
+  <summary>안내 · 등급(랭크) 설명</summary>
+  <p>원본: <a href="https://takayama78online.jp/shop/pages/b03_zaiko.aspx">takayama78online.jp 販売春日店</a>. 상품명은 자동 변환(용어 사전 + 가타카나 음역)이라 어색할 수 있습니다. 정확한 정보·구매는 카드를 눌러 원본 페이지에서 확인하세요. 가격은 세금 포함 엔화입니다.</p>
+  <p>등급(대략적 의미, 정확한 기준은 원 사이트): S 미사용에 가까움 · SA 사용감 매우 적음 · A 사용감 적음 · AB 약간의 사용감 · B 사용감 있음 · BC 사용감 다소 많음 · C 사용감 많음 · D 손상 있음</p>
+</details>
+<div class="bar"><div>
+  <div class="tabs" id="tabs" role="toolbar" aria-label="카테고리"></div>
+  <input id="q" type="search" placeholder="브랜드·모델·품번 검색 (한국어/일본어/영문)" aria-label="검색">
+  <select id="sort" aria-label="정렬">
+    <option value="new">신착순</option>
+    <option value="low">가격 낮은순</option>
+    <option value="high">가격 높은순</option>
+  </select>
+</div></div>
+<main id="list" aria-live="polite"></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let items = [], cat = "전체";
+
+function render() {
+  const q = $("#q").value.trim().toLowerCase();
+  let list = items.filter(it => (cat === "전체" || it.cat === cat) &&
+    (!q || [it.brand, it.model, it.model_ko, it.spec_ko, it.title].join(" ").toLowerCase().includes(q)));
+  const s = $("#sort").value;
+  if (s !== "new") list = [...list].sort((a, b) => s === "low" ? a.price - b.price : b.price - a.price);
+  $("#list").innerHTML = list.length ? list.map(it => `
+    <a class="card" href="https://takayama78online.jp/shop/g/g${esc(it.code)}/" target="_blank" rel="noopener">
+      <img src="${esc(it.img)}" alt="${esc(it.brand + " " + it.model_ko)}" loading="lazy">
+      <div class="body">
+        <div class="brand">${esc(it.brand)} ${it.new ? '<span class="new">NEW</span>' : ""}</div>
+        <div>${esc(it.model_ko)}</div>
+        <div class="ja" lang="ja">${esc(it.model)}</div>
+        <div class="spec">${esc(it.spec_ko)}</div>
+        <div class="row"><span class="price">¥${it.price.toLocaleString()}</span>${it.rank ? `<span class="rank">${esc(it.rank)}등급</span>` : ""}</div>
+      </div>
+    </a>`).join("") : '<div class="empty">조건에 맞는 상품이 없습니다.</div>';
+}
+
+function tabs() {
+  const counts = items.reduce((m, it) => (m[it.cat] = (m[it.cat] || 0) + 1, m), {});
+  $("#tabs").innerHTML = [["전체", items.length], ...Object.entries(counts)].map(([c, n]) =>
+    `<button type="button" aria-pressed="${c === cat}" data-cat="${esc(c)}">${esc(c)} ${n}</button>`).join("");
+}
+
+$("#tabs").onclick = e => { const b = e.target.closest("button"); if (b) { cat = b.dataset.cat; tabs(); render(); } };
+$("#q").oninput = render;
+$("#sort").onchange = render;
+
+// 열 때마다 최신 스냅샷을 받도록 캐시 무효화
+fetch("data.json?t=" + Date.now(), { cache: "no-store" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { items = d.items; $("#meta").textContent = `${d.count.toLocaleString()}개 상품 · 마지막 갱신 ${d.updated} (일본 시간)`; tabs(); render(); })
+  .catch(e => { $("#meta").textContent = "데이터를 불러오지 못했습니다: " + e.message; });
+</script>
+</body>
+</html>
